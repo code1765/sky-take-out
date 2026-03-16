@@ -1,17 +1,20 @@
 package com.sky.config;
 
 import com.sky.interceptor.JwtTokenAdminInterceptor;
+import com.sky.json.JacksonObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.beans.BeansException;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.cbor.MappingJackson2CborHttpMessageConverter;
+import org.springframework.util.ReflectionUtils;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.PathMatchConfigurer;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurationSupport;
-import org.springframework.util.ReflectionUtils;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfoHandlerMapping;
 import springfox.documentation.builders.ApiInfoBuilder;
 import springfox.documentation.builders.PathSelectors;
@@ -27,7 +30,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 閰嶇疆绫伙紝娉ㄥ唽web灞傜浉鍏崇粍浠?
+ * 配置类，注册web层相关组件
  */
 @Configuration
 @Slf4j
@@ -37,20 +40,21 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
     private JwtTokenAdminInterceptor jwtTokenAdminInterceptor;
 
     /**
-     * 娉ㄥ唽鑷畾涔夋嫤鎴櫒
+     * 注册自定义拦截器
      *
-     * @param registry
+     * @param registry 拦截器注册器
      */
+    @Override // 补充@Override注解（原代码遗漏）
     protected void addInterceptors(InterceptorRegistry registry) {
         log.info("开始注册自定义拦截器..");
         registry.addInterceptor(jwtTokenAdminInterceptor)
-                .addPathPatterns("/admin/**")
-                .excludePathPatterns("/admin/employee/login");
+                .addPathPatterns("/admin/**") // 拦截所有/admin开头的请求
+                .excludePathPatterns("/admin/employee/login"); // 排除登录接口（无需token）
     }
 
     /**
-     * 鍏煎 Spring Boot 2.6+ 涓?Springfox 3.x
-     * 鍏抽棴 PathPatternParser锛屽洖閫€鍒?AntPathMatcher
+     * 兼容 Spring Boot 2.6+ 与 Springfox 3.x
+     * 关闭 PathPatternParser，回归到 AntPathMatcher
      */
     @Override
     protected void configurePathMatch(PathMatchConfigurer configurer) {
@@ -58,8 +62,8 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
     }
 
     /**
-     * Springfox 3.0.0 + Spring Boot 2.6+ compatibility.
-     * Filters handler mappings that use PathPatternParser to avoid NPE.
+     * Springfox 3.0.0 + Spring Boot 2.6+ 兼容性处理
+     * 过滤使用 PathPatternParser 的处理器映射，避免空指针异常
      */
     @Bean
     public static BeanPostProcessor springfoxHandlerProviderBeanPostProcessor() {
@@ -97,31 +101,45 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
     }
 
     /**
-     * 閫氳繃knife4j鐢熸垚鎺ュ彛鏂囨。
-     * @return
+     * 通过knife4j生成接口文档
+     * @return Docket 接口文档配置对象
      */
     @Bean
     public Docket docket() {
         ApiInfo apiInfo = new ApiInfoBuilder()
-                .title("鑻嶇┕澶栧崠椤圭洰鎺ュ彛鏂囨。")
+                .title("苍穹外卖项目接口文档")
                 .version("2.0")
-                .description("鑻嶇┕澶栧崠椤圭洰鎺ュ彛鏂囨。")
+                .description("苍穹外卖项目接口文档")
                 .build();
         Docket docket = new Docket(DocumentationType.SWAGGER_2)
                 .apiInfo(apiInfo)
                 .select()
-                .apis(RequestHandlerSelectors.basePackage("com.sky.controller"))
-                .paths(PathSelectors.any())
+                .apis(RequestHandlerSelectors.basePackage("com.sky.controller")) // 扫描controller包下的接口
+                .paths(PathSelectors.any()) // 匹配所有路径
                 .build();
         return docket;
     }
 
     /**
-     * 璁剧疆闈欐€佽祫婧愭槧灏?
-     * @param registry
+     * 设置静态资源映射（支持knife4j文档访问）
+     * @param registry 资源处理器注册器
      */
+    @Override // 补充@Override注解（原代码遗漏）
     protected void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // 映射doc.html到META-INF/resources目录
         registry.addResourceHandler("/doc.html").addResourceLocations("classpath:/META-INF/resources/");
+        // 映射webjars资源
         registry.addResourceHandler("/webjars/**").addResourceLocations("classpath:/META-INF/resources/webjars/");
+    }
+
+    @Override
+    protected void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+        log.info("扩展消息转换器");
+        MappingJackson2CborHttpMessageConverter converter = new MappingJackson2CborHttpMessageConverter();
+        converter.setObjectMapper(new JacksonObjectMapper());
+        converters.add(0,converter);
+
+
+
     }
 }
